@@ -1,0 +1,15 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.12
+pydantic-settings>=2.6
+faster-whisper>=1.1
+# [codec] pulls torchcodec (required for audio IO on torch >= 2.9);
+# [languages] pulls gruut + friends (phonemizers for de and other languages)
+coqui-tts[codec,languages]>=0.25
+torch>=2.4
+torchaudio>=2.4
+# coqui-tts 0.27.x imports symbols removed in transformers 5.x
+transformers>=4.44,<5
+# Kokoro-82M (Apache-2.0) — default human-quality TTS engine
+kokoro>=0.9.4
+soundfile>=0.13

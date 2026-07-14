@@ -1,0 +1,24 @@
+node_modules/
+.next/
+out/
+.vercel/
+
+# env + secrets
+.env
+.env.local
+.env*.local
+
+# local data — the SQLite DB stores provider API keys; never commit anything in data/
+data/
+
+# build artifacts
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# session/tooling working files
+.cm/
+*.vsix
+
+# Claude Code local project settings (machine-specific paths)
+.claude/
