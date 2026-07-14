@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getBotBySlug } from "@/lib/bots";
+import { getBotBySlugAsync } from "@/lib/bots";
 import { resetKnowledgeBase } from "@/lib/documents";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ type Ctx = { params: Promise<{ slug: string }> };
  */
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { slug } = await ctx.params;
-  const bot = getBotBySlug(slug);
+  const bot = await getBotBySlugAsync(slug);
   if (!bot) return Response.json({ error: "bot not found" }, { status: 404 });
 
   const body = (await req.json().catch(() => null)) as { confirm?: string } | null;
@@ -22,6 +22,6 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       { status: 400 }
     );
   }
-  const removed = resetKnowledgeBase(bot.id);
+  const removed = await resetKnowledgeBase(bot.id);
   return Response.json({ ok: true, removed });
 }

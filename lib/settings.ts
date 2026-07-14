@@ -1,10 +1,5 @@
-import { getDb } from "./db";
+import { getSupabase, nowEpoch } from "./supabase";
 
-/**
- * Global, instance-wide settings (one operator, one LLM account).
- * Everything a white-label customer sees lives per-bot on the bots table;
- * system prompts live in the prompts table (see lib/prompts.ts).
- */
 export type SettingKey =
   | "openrouter_api_key"
   | "openrouter_base_url"
@@ -29,12 +24,42 @@ const ENV_FALLBACK: Record<SettingKey, () => string | undefined> = {
 };
 
 export function getSetting(key: SettingKey): string {
-  const db = getDb();
-  const row = db.prepare(`SELECT value FROM settings WHERE key = ?`).get(key) as
-    | { value: string }
-    | undefined;
-  if (row?.value) return row.value;
+  // On serverless, prefer env vars directly for speed (avoids a DB round-trip)
+  const envVal = ENV_FALLBACK[key]();
+  if (envVal) return envVal;
+  return "";
+}
+
+export async function getSettingAsync(key: SettingKey): Promise<string> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", key)
+    .single();
+  if (data?.value) return data.value;
   return ENV_FALLBACK[key]() ?? "";
+}
+
+export async function getAllSettingsAsync(): Promise<Settings> {
+  const supabase = getSupabase();
+  const { data } = await supabase.from("settings").select("key, value");
+
+  const dbMap: Record<string, string> = {};
+  if (data) {
+    for (const row of data) dbMap[row.key] = row.value;
+  }
+
+  const resolve = (key: SettingKey): string =>
+    dbMap[key] || ENV_FALLBACK[key]() || "";
+
+  return {
+    openrouter_api_key: resolve("openrouter_api_key"),
+    openrouter_base_url: resolve("openrouter_base_url"),
+    default_model: resolve("default_model"),
+    tavily_api_key: resolve("tavily_api_key"),
+    voice_service_url: resolve("voice_service_url"),
+  };
 }
 
 export function getAllSettings(): Settings {
@@ -47,24 +72,19 @@ export function getAllSettings(): Settings {
   };
 }
 
-export function setSetting(key: SettingKey, value: string): void {
-  const db = getDb();
-  db.prepare(
-    `INSERT INTO settings (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-  ).run(key, value);
+export async function setSetting(key: SettingKey, value: string): Promise<void> {
+  const supabase = getSupabase();
+  await supabase.from("settings").upsert({ key, value }, { onConflict: "key" });
 }
 
-export function setSettings(values: Partial<Settings>): void {
-  const db = getDb();
-  const stmt = db.prepare(
-    `INSERT INTO settings (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-  );
-  const tx = db.transaction((entries: [string, string][]) => {
-    for (const [k, v] of entries) stmt.run(k, v);
-  });
-  tx(Object.entries(values).filter(([, v]) => v !== undefined) as [string, string][]);
+export async function setSettings(values: Partial<Settings>): Promise<void> {
+  const supabase = getSupabase();
+  const rows = Object.entries(values)
+    .filter(([, v]) => v !== undefined)
+    .map(([key, value]) => ({ key, value: value! }));
+  if (rows.length > 0) {
+    await supabase.from("settings").upsert(rows, { onConflict: "key" });
+  }
 }
 
 export function getRedactedSettings(): Settings & {

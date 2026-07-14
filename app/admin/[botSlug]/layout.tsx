@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getBotBySlug, listBots } from "@/lib/bots";
+import { getBotBySlugAsync, listBotsAsync } from "@/lib/bots";
 import { WorkspaceSidebar } from "@/components/admin/workspace-sidebar";
 
 export const runtime = "nodejs";
@@ -13,10 +13,11 @@ export default async function WorkspaceLayout({
   params: Promise<{ botSlug: string }>;
 }) {
   const { botSlug } = await params;
-  const bot = getBotBySlug(botSlug);
+  const bot = await getBotBySlugAsync(botSlug);
   if (!bot) notFound();
 
-  const bots = listBots().map((b) => ({
+  const allBots = await listBotsAsync();
+  const bots = allBots.map((b) => ({
     slug: b.slug,
     name: b.name,
     primaryColor: b.primary_color,
@@ -29,8 +30,6 @@ export default async function WorkspaceLayout({
         bots={bots}
         current={{ slug: bot.slug, name: bot.name, primaryColor: bot.primary_color }}
       />
-      {/* min-w-0 keeps wide tables scrolling inside their own wrapper
-          instead of stretching the flex row past the viewport. */}
       <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10 overflow-y-auto">
         <div className="max-w-5xl">{children}</div>
       </main>

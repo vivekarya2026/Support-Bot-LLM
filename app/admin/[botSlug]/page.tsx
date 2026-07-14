@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getBotBySlug } from "@/lib/bots";
+import { getBotBySlugAsync } from "@/lib/bots";
 import { listConversations, listSupportRequests } from "@/lib/conversations";
 import { listDocuments } from "@/lib/documents";
 import { getRedactedSettings } from "@/lib/settings";
@@ -17,13 +17,13 @@ export default async function BotDashboard({
   params: Promise<{ botSlug: string }>;
 }) {
   const { botSlug } = await params;
-  const bot = getBotBySlug(botSlug);
+  const bot = await getBotBySlugAsync(botSlug);
   if (!bot) notFound();
 
   const settings = getRedactedSettings();
-  const docs = listDocuments(bot.id);
-  const conversations = listConversations(bot.id, 10);
-  const support = listSupportRequests(bot.id);
+  const docs = await listDocuments(bot.id);
+  const conversations = await listConversations(bot.id, 10);
+  const support = await listSupportRequests(bot.id);
   const newSupport = support.filter((s) => s.status === "new").length;
   const totalChunks = docs.reduce((acc, d) => acc + d.chunk_count, 0);
   const base = `/admin/${bot.slug}`;

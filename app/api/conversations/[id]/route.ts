@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getConversation } from "@/lib/conversations";
-import { getBotByPublicKey } from "@/lib/bots";
+import { getBotByPublicKeyAsync } from "@/lib/bots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +16,10 @@ export async function GET(
 ) {
   const { id } = await ctx.params;
   const botKey = req.nextUrl.searchParams.get("botKey") ?? "";
-  const bot = botKey ? getBotByPublicKey(botKey) : undefined;
+  const bot = botKey ? await getBotByPublicKeyAsync(botKey) : undefined;
   if (!bot) return Response.json({ error: "Unknown bot" }, { status: 404 });
 
-  const { conversation, messages } = getConversation(id);
+  const { conversation, messages } = await getConversation(id);
   if (!conversation || conversation.bot_id !== bot.id) {
     return Response.json({ error: "Conversation not found" }, { status: 404 });
   }

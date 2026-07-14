@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getBotByPublicKey, toPublicConfig } from "@/lib/bots";
+import { getBotByPublicKeyAsync, toPublicConfig } from "@/lib/bots";
 import { ChatWidget } from "@/components/widget/chat-widget";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ export default async function EmbedPage({
   params: Promise<{ botKey: string }>;
 }) {
   const { botKey } = await params;
-  const bot = getBotByPublicKey(botKey);
+  const bot = await getBotByPublicKeyAsync(botKey);
   if (!bot) notFound();
   const config = toPublicConfig(bot);
 

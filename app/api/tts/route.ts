@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getBotByPublicKey } from "@/lib/bots";
+import { getBotByPublicKeyAsync } from "@/lib/bots";
 import { getMessageForBot } from "@/lib/conversations";
 import { getVoiceServiceUrl, resolveTtsTarget, takeVoiceToken, voiceGloballyEnabled } from "@/lib/voice";
 
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   } | null;
   if (!body) return Response.json({ error: "invalid body" }, { status: 400 });
 
-  const bot = getBotByPublicKey(body.botKey ?? "");
+  const bot = await getBotByPublicKeyAsync(body.botKey ?? "");
   if (!bot) return Response.json({ error: "unknown bot" }, { status: 404 });
   if (!bot.voice_enabled || !bot.tts_enabled || !voiceGloballyEnabled()) {
     return Response.json({ error: "voice output is not enabled for this bot" }, { status: 403 });
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   // arbitrary text through this bot, only actual replies.
   let text = "";
   if (typeof body.messageId === "number") {
-    const msg = getMessageForBot(body.messageId, bot.id);
+    const msg = await getMessageForBot(body.messageId, bot.id);
     if (!msg || msg.role !== "assistant") {
       return Response.json({ error: "unknown message" }, { status: 404 });
     }

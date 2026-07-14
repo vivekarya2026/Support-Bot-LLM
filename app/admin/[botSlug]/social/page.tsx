@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getBotBySlug } from "@/lib/bots";
+import { getBotBySlugAsync } from "@/lib/bots";
 import { SocialListening } from "./social-client";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ export default async function SocialPage({
   params: Promise<{ botSlug: string }>;
 }) {
   const { botSlug } = await params;
-  const bot = getBotBySlug(botSlug);
+  const bot = await getBotBySlugAsync(botSlug);
   if (!bot) notFound();
   return <SocialListening botSlug={bot.slug} botName={bot.name} />;
 }

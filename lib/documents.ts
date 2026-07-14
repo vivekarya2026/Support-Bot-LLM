@@ -2,7 +2,7 @@ import path from "node:path";
 import * as cheerio from "cheerio";
 import TurndownService from "turndown";
 import mammoth from "mammoth";
-import { getDb, resetBotKnowledge } from "./db";
+import { getSupabase, nowEpoch } from "./supabase";
 import { embed } from "./embeddings";
 
 export type DocumentKind = "md" | "txt" | "pdf" | "docx" | "url";
@@ -11,7 +11,6 @@ const CHUNK_SIZE = 800;
 const CHUNK_OVERLAP = 100;
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
 
-/** Sentence-split a paragraph that exceeds CHUNK_SIZE; hard-wrap pathological sentences. */
 function splitLongParagraph(paragraph: string): string[] {
   if (paragraph.length <= CHUNK_SIZE) return [paragraph];
   const sentences = paragraph.match(/[^.!?\n]+[.!?]+["')\]]*\s*|[^.!?\n]+\n?/g) ?? [paragraph];
@@ -34,7 +33,6 @@ function splitLongParagraph(paragraph: string): string[] {
   });
 }
 
-/** Overlap tail snapped to a whitespace boundary so it never cuts mid-word. */
 function overlapTail(text: string): string {
   if (text.length <= CHUNK_OVERLAP) return text;
   const tail = text.slice(text.length - CHUNK_OVERLAP);
@@ -122,24 +120,21 @@ export async function parseUrlInput(url: string): Promise<ParsedDocument> {
 }
 
 async function insertChunks(botId: number, documentId: number, source: string, chunks: string[]) {
-  const db = getDb();
-  const insertChunk = db.prepare(
-    `INSERT INTO chunks (document_id, bot_id, source, chunk_index, content) VALUES (?, ?, ?, ?, ?)`
-  );
-  const insertVector = db.prepare(
-    `INSERT INTO chunk_vectors (rowid, bot_id, embedding) VALUES (?, ?, vec_f32(?))`
-  );
+  const supabase = getSupabase();
   for (let i = 0; i < chunks.length; i++) {
-    const info = insertChunk.run(documentId, botId, source, i, chunks[i]);
-    const rowid = Number(info.lastInsertRowid);
     const vec = await embed(chunks[i]);
-    // BigInt binds as a true INTEGER — vec0 partition keys reject the FLOAT
-    // that better-sqlite3 uses for plain JS numbers.
-    insertVector.run(BigInt(rowid), BigInt(botId), JSON.stringify(Array.from(vec)));
+    const vecStr = `[${vec.join(",")}]`;
+    await supabase.from("chunks").insert({
+      document_id: documentId,
+      bot_id: botId,
+      source,
+      chunk_index: i,
+      content: chunks[i],
+      embedding: vecStr,
+    });
   }
 }
 
-/** Index a parsed document into one bot's knowledge base. */
 export async function indexDocument(
   botId: number,
   doc: ParsedDocument
@@ -147,13 +142,17 @@ export async function indexDocument(
   if (!doc.text || doc.text.trim().length === 0) {
     throw new Error("Parsed document is empty");
   }
-  const db = getDb();
+  const supabase = getSupabase();
   const chunks = chunkText(doc.text);
 
-  const info = db
-    .prepare(`INSERT INTO documents (bot_id, source, kind) VALUES (?, ?, ?)`)
-    .run(botId, doc.source, doc.kind);
-  const documentId = Number(info.lastInsertRowid);
+  const { data, error } = await supabase
+    .from("documents")
+    .insert({ bot_id: botId, source: doc.source, kind: doc.kind, created_at: nowEpoch() })
+    .select("id")
+    .single();
+
+  if (error || !data) throw new Error(`Failed to insert document: ${error?.message}`);
+  const documentId = data.id;
 
   await insertChunks(botId, documentId, doc.source, chunks);
   return { documentId, chunkCount: chunks.length };
@@ -167,58 +166,66 @@ export type DocumentListItem = {
   chunk_count: number;
 };
 
-export function listDocuments(botId: number): DocumentListItem[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT d.id, d.source, d.kind, d.created_at,
-              (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
-       FROM documents d
-       WHERE d.bot_id = ?
-       ORDER BY d.created_at DESC`
-    )
-    .all(botId) as DocumentListItem[];
+export async function listDocuments(botId: number): Promise<DocumentListItem[]> {
+  const supabase = getSupabase();
+  const { data: docs } = await supabase
+    .from("documents")
+    .select("id, source, kind, created_at")
+    .eq("bot_id", botId)
+    .order("created_at", { ascending: false });
+
+  if (!docs) return [];
+
+  const results: DocumentListItem[] = [];
+  for (const d of docs) {
+    const { count } = await supabase
+      .from("chunks")
+      .select("*", { count: "exact", head: true })
+      .eq("document_id", d.id);
+    results.push({ ...d, kind: d.kind as DocumentKind, chunk_count: count ?? 0 });
+  }
+  return results;
 }
 
-export function getDocument(botId: number, id: number): DocumentListItem | undefined {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT d.id, d.source, d.kind, d.created_at,
-              (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
-       FROM documents d WHERE d.id = ? AND d.bot_id = ?`
-    )
-    .get(id, botId) as DocumentListItem | undefined;
+export async function getDocument(
+  botId: number,
+  id: number
+): Promise<DocumentListItem | undefined> {
+  const supabase = getSupabase();
+  const { data: d } = await supabase
+    .from("documents")
+    .select("id, source, kind, created_at")
+    .eq("id", id)
+    .eq("bot_id", botId)
+    .single();
+  if (!d) return undefined;
+
+  const { count } = await supabase
+    .from("chunks")
+    .select("*", { count: "exact", head: true })
+    .eq("document_id", d.id);
+  return { ...d, kind: d.kind as DocumentKind, chunk_count: count ?? 0 };
 }
 
-function deleteChunksForDocument(documentId: number): void {
-  const db = getDb();
-  const chunkIds = db
-    .prepare(`SELECT id FROM chunks WHERE document_id = ?`)
-    .all(documentId) as { id: number }[];
-  const delVec = db.prepare(`DELETE FROM chunk_vectors WHERE rowid = ?`);
-  for (const { id } of chunkIds) delVec.run(BigInt(id));
-  db.prepare(`DELETE FROM chunks WHERE document_id = ?`).run(documentId);
+async function deleteChunksForDocument(documentId: number): Promise<void> {
+  const supabase = getSupabase();
+  await supabase.from("chunks").delete().eq("document_id", documentId);
 }
 
-/** Returns false when the document doesn't exist or belongs to another bot. */
-export function deleteDocument(botId: number, id: number): boolean {
-  const db = getDb();
-  if (!getDocument(botId, id)) return false;
-  const tx = db.transaction((docId: number) => {
-    deleteChunksForDocument(docId);
-    db.prepare(`DELETE FROM documents WHERE id = ?`).run(docId);
-  });
-  tx(id);
+export async function deleteDocument(botId: number, id: number): Promise<boolean> {
+  const doc = await getDocument(botId, id);
+  if (!doc) return false;
+  const supabase = getSupabase();
+  await deleteChunksForDocument(id);
+  await supabase.from("documents").delete().eq("id", id);
   return true;
 }
 
-/** Re-crawl a URL document in place: old chunks/vectors out, fresh content in. */
 export async function reindexUrlDocument(
   botId: number,
   id: number
 ): Promise<{ chunkCount: number }> {
-  const doc = getDocument(botId, id);
+  const doc = await getDocument(botId, id);
   if (!doc) throw new Error("Document not found");
   if (doc.kind !== "url") {
     const err = new Error("Only URL documents can be re-indexed — re-upload the file instead");
@@ -229,13 +236,25 @@ export async function reindexUrlDocument(
   if (!parsed.text.trim()) throw new Error("Fetched page is empty");
   const chunks = chunkText(parsed.text);
 
-  deleteChunksForDocument(id);
+  await deleteChunksForDocument(id);
   await insertChunks(botId, id, doc.source, chunks);
-  getDb().prepare(`UPDATE documents SET created_at = unixepoch() WHERE id = ?`).run(id);
+
+  const supabase = getSupabase();
+  await supabase.from("documents").update({ created_at: nowEpoch() }).eq("id", id);
   return { chunkCount: chunks.length };
 }
 
-/** "Start fresh" — wipe the whole knowledge base for one bot. */
-export function resetKnowledgeBase(botId: number): { documents: number; chunks: number } {
-  return resetBotKnowledge(botId);
+export async function resetKnowledgeBase(
+  botId: number
+): Promise<{ documents: number; chunks: number }> {
+  const supabase = getSupabase();
+  const { count: chunks } = await supabase
+    .from("chunks")
+    .delete({ count: "exact" })
+    .eq("bot_id", botId);
+  const { count: documents } = await supabase
+    .from("documents")
+    .delete({ count: "exact" })
+    .eq("bot_id", botId);
+  return { documents: documents ?? 0, chunks: chunks ?? 0 };
 }

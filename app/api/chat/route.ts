@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getOpenRouter } from "@/lib/openrouter";
 import { retrieve, formatContext } from "@/lib/rag";
-import { getBotByPublicKey, effectiveModel } from "@/lib/bots";
+import { getBotByPublicKeyAsync, effectiveModel } from "@/lib/bots";
 import { getActivePromptContent } from "@/lib/prompts";
 import { appendMessage, ensureConversation } from "@/lib/conversations";
 import { LANGUAGE_NAMES, normalizeLanguage } from "@/lib/voice";
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
 
   const { botKey, messages, conversationId } = body;
   if (!botKey) return jsonError("botKey is required", 400);
-  const bot = getBotByPublicKey(botKey);
+  const bot = await getBotByPublicKeyAsync(botKey);
   if (!bot) return jsonError("Unknown bot", 404);
   if (!Array.isArray(messages) || messages.length === 0) {
     return jsonError("messages must be a non-empty array", 400);
@@ -93,11 +93,11 @@ export async function POST(req: NextRequest) {
     return jsonError("No model configured. Set a default model in admin settings.", 500);
   }
 
-  const convoId = ensureConversation(bot.id, conversationId ?? null, model);
+  const convoId = await ensureConversation(bot.id, conversationId ?? null, model);
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   const query = lastUser?.content ?? "";
   if (lastUser) {
-    appendMessage(convoId, "user", lastUser.content);
+    await appendMessage(convoId, "user", lastUser.content);
   }
 
   let chunks: Awaited<ReturnType<typeof retrieve>> = [];
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     replyLanguage = fixed || normalizeLanguage(body.language ?? "");
   }
 
-  const systemPrompt = getActivePromptContent(bot.id);
+  const systemPrompt = await getActivePromptContent(bot.id);
   const fullMessages: ChatMessage[] = [
     { role: "system", content: buildSystemMessage(systemPrompt, contextText, replyLanguage) },
     ...messages.filter((m) => m.role !== "system"),
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
   const citations = chunks.map((c, i) => ({
     n: i + 1,
     source: c.source,
-    chunkIndex: c.chunkIndex,
+    chunkIndex: c.chunk_index,
     preview: c.content.slice(0, 200),
   }));
 
@@ -157,11 +157,11 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      function persistReply() {
+      async function persistReply() {
         if (persisted) return;
         persisted = true;
         const cleanReply = stripFollowups(assistantBuffer);
-        if (cleanReply) persistedId = appendMessage(convoId, "assistant", cleanReply, citations);
+        if (cleanReply) persistedId = await appendMessage(convoId, "assistant", cleanReply, citations);
       }
 
       // first event: convo id (so the client can stitch turns together)
@@ -220,7 +220,7 @@ export async function POST(req: NextRequest) {
           safeEnqueue(`event: followups\ndata: ${JSON.stringify(followups)}\n\n`);
         }
 
-        persistReply();
+        await persistReply();
         // The persisted message id lets the widget request TTS by reference
         // (server then ignores client-supplied text for this bot's audio).
         if (persistedId !== null) {
@@ -229,7 +229,7 @@ export async function POST(req: NextRequest) {
         safeEnqueue(`event: done\ndata: {}\n\n`);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        persistReply();
+        await persistReply();
         safeEnqueue(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
       } finally {
         try {

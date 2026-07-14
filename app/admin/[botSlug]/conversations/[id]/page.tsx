@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getBotBySlug } from "@/lib/bots";
+import { getBotBySlugAsync } from "@/lib/bots";
 import { getConversation } from "@/lib/conversations";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft } from "lucide-react";
@@ -15,9 +15,9 @@ export default async function ConversationDetailPage({
   params: Promise<{ botSlug: string; id: string }>;
 }) {
   const { botSlug, id } = await params;
-  const bot = getBotBySlug(botSlug);
+  const bot = await getBotBySlugAsync(botSlug);
   if (!bot) notFound();
-  const { conversation, messages } = getConversation(id);
+  const { conversation, messages } = await getConversation(id);
   if (!conversation || conversation.bot_id !== bot.id) notFound();
 
   return (

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import {
   deleteBot,
-  getBotBySlug,
+  getBotBySlugAsync,
   isValidHslTriple,
   serializeBot,
   updateBot,
@@ -15,14 +15,14 @@ type Ctx = { params: Promise<{ slug: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const { slug } = await ctx.params;
-  const bot = getBotBySlug(slug);
+  const bot = await getBotBySlugAsync(slug);
   if (!bot) return Response.json({ error: "bot not found" }, { status: 404 });
   return Response.json({ bot: serializeBot(bot) });
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { slug } = await ctx.params;
-  const bot = getBotBySlug(slug);
+  const bot = await getBotBySlugAsync(slug);
   if (!bot) return Response.json({ error: "bot not found" }, { status: 404 });
 
   const body = (await req.json().catch(() => null)) as {
@@ -123,14 +123,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (body.replyInUserLanguage !== undefined)
     patch.reply_in_user_language = body.replyInUserLanguage ? 1 : 0;
 
-  const updated = updateBot(bot.id, patch);
+  const updated = await updateBot(bot.id, patch);
   return Response.json({ bot: serializeBot(updated) });
 }
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const { slug } = await ctx.params;
-  const bot = getBotBySlug(slug);
+  const bot = await getBotBySlugAsync(slug);
   if (!bot) return Response.json({ error: "bot not found" }, { status: 404 });
-  deleteBot(bot.id);
+  await deleteBot(bot.id);
   return Response.json({ ok: true });
 }

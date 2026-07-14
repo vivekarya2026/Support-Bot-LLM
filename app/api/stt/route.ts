@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getBotByPublicKey } from "@/lib/bots";
+import { getBotByPublicKeyAsync } from "@/lib/bots";
 import { getVoiceServiceUrl, normalizeLanguage, takeVoiceToken, voiceGloballyEnabled } from "@/lib/voice";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   const botKey = String(form.get("botKey") ?? "");
-  const bot = getBotByPublicKey(botKey);
+  const bot = await getBotByPublicKeyAsync(botKey);
   if (!bot) return Response.json({ error: "unknown bot" }, { status: 404 });
   if (!bot.voice_enabled || !bot.stt_enabled || !voiceGloballyEnabled()) {
     return Response.json({ error: "voice input is not enabled for this bot" }, { status: 403 });

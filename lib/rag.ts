@@ -1,39 +1,30 @@
-import { getDb } from "./db";
+import { getSupabase } from "./supabase";
 import { embed } from "./embeddings";
 
 export type RetrievedChunk = {
   id: number;
   source: string;
-  chunkIndex: number;
+  chunk_index: number;
   content: string;
   distance: number;
 };
 
-/** KNN over the bot's vector partition only — cross-bot leakage is impossible here. */
 export async function retrieve(botId: number, query: string, k = 4): Promise<RetrievedChunk[]> {
-  const db = getDb();
+  const supabase = getSupabase();
   const queryEmbedding = await embed(query);
 
-  const rows = db
-    .prepare(
-      `
-      SELECT
-        c.id        AS id,
-        c.source    AS source,
-        c.chunk_index AS chunkIndex,
-        c.content   AS content,
-        v.distance  AS distance
-      FROM chunk_vectors v
-      JOIN chunks c ON c.id = v.rowid
-      WHERE v.embedding MATCH vec_f32(?)
-        AND v.bot_id = ?
-        AND k = ?
-      ORDER BY v.distance
-      `
-    )
-    .all(JSON.stringify(Array.from(queryEmbedding)), BigInt(botId), k) as RetrievedChunk[];
+  const { data, error } = await supabase.rpc("match_chunks", {
+    query_embedding: `[${queryEmbedding.join(",")}]`,
+    match_bot_id: botId,
+    match_count: k,
+  });
 
-  return rows;
+  if (error) {
+    console.error("RAG retrieve error:", error.message);
+    return [];
+  }
+
+  return (data ?? []) as RetrievedChunk[];
 }
 
 export function formatContext(chunks: RetrievedChunk[]): string {
@@ -41,7 +32,7 @@ export function formatContext(chunks: RetrievedChunk[]): string {
   return chunks
     .map(
       (c, i) =>
-        `[${i + 1}] Source: ${c.source} (chunk ${c.chunkIndex})\n${c.content}`
+        `[${i + 1}] Source: ${c.source} (chunk ${c.chunk_index})\n${c.content}`
     )
     .join("\n\n---\n\n");
 }

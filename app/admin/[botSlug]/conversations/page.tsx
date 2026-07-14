@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getBotBySlug } from "@/lib/bots";
+import { getBotBySlugAsync } from "@/lib/bots";
 import { listConversations } from "@/lib/conversations";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,9 @@ export default async function ConversationsPage({
   params: Promise<{ botSlug: string }>;
 }) {
   const { botSlug } = await params;
-  const bot = getBotBySlug(botSlug);
+  const bot = await getBotBySlugAsync(botSlug);
   if (!bot) notFound();
-  const conversations = listConversations(bot.id);
+  const conversations = await listConversations(bot.id);
 
   return (
     <div>

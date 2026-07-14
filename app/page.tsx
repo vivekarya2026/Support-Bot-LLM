@@ -11,14 +11,14 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { listBots, toPublicConfig } from "@/lib/bots";
+import { listBotsAsync, toPublicConfig } from "@/lib/bots";
 import { ChatWidget } from "@/components/widget/chat-widget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default function LandingPage() {
-  const bots = listBots();
+export default async function LandingPage() {
+  const bots = await listBotsAsync();
   if (bots.length === 0) redirect("/onboarding");
   const demoBot = bots[0];
 

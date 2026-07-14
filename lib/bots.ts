@@ -1,4 +1,4 @@
-import { getDb, generatePublicKey, resetBotKnowledge } from "./db";
+import { getSupabase, generatePublicKey, nowEpoch } from "./supabase";
 import { getTemplate, GENERIC_TEMPLATE_ID } from "./prompt-templates";
 import { getSetting } from "./settings";
 
@@ -11,16 +11,16 @@ export type Bot = {
   intro: string;
   placeholder: string;
   primary_color: string;
-  quick_starts: string; // JSON string[]
-  model: string; // '' = use global default_model
+  quick_starts: string;
+  model: string;
   active_prompt_id: number | null;
-  voice_enabled: number; // 0|1 master switch for the voice module
+  voice_enabled: number;
   stt_enabled: number;
   tts_enabled: number;
-  voice_autoplay: number; // auto-speak settled replies
-  handsfree_enabled: number; // hands-free conversation mode
-  voice_language: string; // 'auto' | ISO 639-1
-  tts_voices: string; // JSON {lang: voiceId}
+  voice_autoplay: number;
+  handsfree_enabled: number;
+  voice_language: string;
+  tts_voices: string;
   reply_in_user_language: number;
   created_at: number;
   updated_at: number;
@@ -32,10 +32,9 @@ export type BotVoiceConfig = {
   tts: boolean;
   autoplay: boolean;
   handsfree: boolean;
-  language: string; // 'auto' | ISO 639-1
+  language: string;
 };
 
-/** What visitor-facing surfaces (widget, share page, embed) are allowed to see. */
 export type BotPublicConfig = {
   botKey: string;
   name: string;
@@ -44,7 +43,6 @@ export type BotPublicConfig = {
   placeholder: string;
   primaryColor: string;
   quickStarts: string[];
-  // Voice flags + language only — voice IDs resolve server-side in /api/tts.
   voice: BotVoiceConfig;
 };
 
@@ -55,37 +53,89 @@ export type BotListItem = Bot & {
 };
 
 export function listBots(): BotListItem[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT b.*,
-              (SELECT COUNT(*) FROM documents d WHERE d.bot_id = b.id) AS doc_count,
-              (SELECT COUNT(*) FROM conversations c WHERE c.bot_id = b.id) AS conversation_count,
-              (SELECT COUNT(*) FROM support_requests s WHERE s.bot_id = b.id AND s.status = 'new') AS new_support_count
-       FROM bots b
-       ORDER BY b.created_at ASC`
-    )
-    .all() as BotListItem[];
+  // This is called from server components synchronously in layout.tsx.
+  // For Supabase we need to make it work — we'll throw an error that
+  // forces callers to use the async version instead.
+  throw new Error("Use listBotsAsync() instead — Supabase requires async");
+}
+
+export async function listBotsAsync(): Promise<BotListItem[]> {
+  const supabase = getSupabase();
+  const { data: bots, error } = await supabase
+    .from("bots")
+    .select("*")
+    .order("created_at", { ascending: true });
+
+  if (error || !bots) return [];
+
+  const results: BotListItem[] = [];
+  for (const bot of bots) {
+    const { count: docCount } = await supabase
+      .from("documents")
+      .select("*", { count: "exact", head: true })
+      .eq("bot_id", bot.id);
+
+    const { count: convoCount } = await supabase
+      .from("conversations")
+      .select("*", { count: "exact", head: true })
+      .eq("bot_id", bot.id);
+
+    const { count: supportCount } = await supabase
+      .from("support_requests")
+      .select("*", { count: "exact", head: true })
+      .eq("bot_id", bot.id)
+      .eq("status", "new");
+
+    results.push({
+      ...bot,
+      doc_count: docCount ?? 0,
+      conversation_count: convoCount ?? 0,
+      new_support_count: supportCount ?? 0,
+    });
+  }
+  return results;
 }
 
 export function countBots(): number {
-  const db = getDb();
-  return (db.prepare(`SELECT COUNT(*) AS c FROM bots`).get() as { c: number }).c;
+  throw new Error("Use countBotsAsync() instead");
+}
+
+export async function countBotsAsync(): Promise<number> {
+  const supabase = getSupabase();
+  const { count } = await supabase
+    .from("bots")
+    .select("*", { count: "exact", head: true });
+  return count ?? 0;
 }
 
 export function getBotBySlug(slug: string): Bot | undefined {
-  const db = getDb();
-  return db.prepare(`SELECT * FROM bots WHERE slug = ?`).get(slug) as Bot | undefined;
+  throw new Error("Use getBotBySlugAsync() instead");
 }
 
-export function getBotByPublicKey(publicKey: string): Bot | undefined {
-  const db = getDb();
-  return db.prepare(`SELECT * FROM bots WHERE public_key = ?`).get(publicKey) as Bot | undefined;
+export async function getBotBySlugAsync(slug: string): Promise<Bot | undefined> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("bots")
+    .select("*")
+    .eq("slug", slug)
+    .single();
+  return data ?? undefined;
 }
 
-export function getBotById(id: number): Bot | undefined {
-  const db = getDb();
-  return db.prepare(`SELECT * FROM bots WHERE id = ?`).get(id) as Bot | undefined;
+export async function getBotByPublicKeyAsync(publicKey: string): Promise<Bot | undefined> {
+  const supabase = getSupabase();
+  const { data } = await supabase
+    .from("bots")
+    .select("*")
+    .eq("public_key", publicKey)
+    .single();
+  return data ?? undefined;
+}
+
+export async function getBotByIdAsync(id: number): Promise<Bot | undefined> {
+  const supabase = getSupabase();
+  const { data } = await supabase.from("bots").select("*").eq("id", id).single();
+  return data ?? undefined;
 }
 
 function slugify(name: string): string {
@@ -99,7 +149,7 @@ function slugify(name: string): string {
   return base || "bot";
 }
 
-export function createBot(input: {
+export async function createBot(input: {
   name: string;
   primaryColor?: string;
   greeting?: string;
@@ -107,42 +157,60 @@ export function createBot(input: {
   placeholder?: string;
   quickStarts?: string[];
   templateId?: string;
-}): Bot {
-  const db = getDb();
+}): Promise<Bot> {
+  const supabase = getSupabase();
   const name = input.name.trim();
   if (!name) throw new Error("Bot name is required");
 
   const template = getTemplate(input.templateId ?? "") ?? getTemplate(GENERIC_TEMPLATE_ID)!;
 
   let slug = slugify(name);
-  for (let i = 2; getBotBySlug(slug); i++) slug = `${slugify(name)}-${i}`;
+  let existing = await getBotBySlugAsync(slug);
+  for (let i = 2; existing; i++) {
+    slug = `${slugify(name)}-${i}`;
+    existing = await getBotBySlugAsync(slug);
+  }
 
-  const info = db
-    .prepare(
-      `INSERT INTO bots (slug, public_key, name, greeting, intro, placeholder, primary_color, quick_starts)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
+  const now = nowEpoch();
+  const { data: bot, error } = await supabase
+    .from("bots")
+    .insert({
       slug,
-      generatePublicKey(),
+      public_key: generatePublicKey(),
       name,
-      input.greeting ?? template.greeting(name),
-      input.intro ?? template.intro,
-      input.placeholder ?? "Ask me anything…",
-      input.primaryColor ?? "217 91% 60%",
-      JSON.stringify(input.quickStarts ?? template.quickStarts)
-    );
-  const botId = Number(info.lastInsertRowid);
+      greeting: input.greeting ?? template.greeting(name),
+      intro: input.intro ?? template.intro,
+      placeholder: input.placeholder ?? "Ask me anything…",
+      primary_color: input.primaryColor ?? "217 91% 60%",
+      quick_starts: JSON.stringify(input.quickStarts ?? template.quickStarts),
+      created_at: now,
+      updated_at: now,
+    })
+    .select()
+    .single();
 
-  const promptInfo = db
-    .prepare(`INSERT INTO prompts (bot_id, name, content) VALUES (?, ?, ?)`)
-    .run(botId, template.label, template.prompt(name));
-  db.prepare(`UPDATE bots SET active_prompt_id = ? WHERE id = ?`).run(
-    Number(promptInfo.lastInsertRowid),
-    botId
-  );
+  if (error || !bot) throw new Error(`Failed to create bot: ${error?.message}`);
 
-  return getBotById(botId)!;
+  const { data: prompt } = await supabase
+    .from("prompts")
+    .insert({
+      bot_id: bot.id,
+      name: template.label,
+      content: template.prompt(name),
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single();
+
+  if (prompt) {
+    await supabase
+      .from("bots")
+      .update({ active_prompt_id: prompt.id })
+      .eq("id", bot.id);
+  }
+
+  return (await getBotByIdAsync(bot.id))!;
 }
 
 const UPDATABLE = [
@@ -165,39 +233,28 @@ const UPDATABLE = [
 
 type UpdatableKey = (typeof UPDATABLE)[number];
 
-export function updateBot(id: number, patch: Partial<Pick<Bot, UpdatableKey>>): Bot {
-  const db = getDb();
-  const sets: string[] = [];
-  const values: unknown[] = [];
+export async function updateBot(id: number, patch: Partial<Pick<Bot, UpdatableKey>>): Promise<Bot> {
+  const supabase = getSupabase();
+  const updates: Record<string, unknown> = { updated_at: nowEpoch() };
   for (const key of UPDATABLE) {
     const v = patch[key];
-    if (v !== undefined) {
-      sets.push(`${key} = ?`);
-      values.push(v);
-    }
+    if (v !== undefined) updates[key] = v;
   }
-  if (sets.length > 0) {
-    db.prepare(`UPDATE bots SET ${sets.join(", ")}, updated_at = unixepoch() WHERE id = ?`).run(
-      ...values,
-      id
-    );
-  }
-  const bot = getBotById(id);
+
+  await supabase.from("bots").update(updates).eq("id", id);
+  const bot = await getBotByIdAsync(id);
   if (!bot) throw new Error("Bot not found");
   return bot;
 }
 
-/** Full cascade: KB (incl. vectors), prompts, conversations (+messages via FK), support requests, bot row. */
-export function deleteBot(id: number): void {
-  const db = getDb();
-  resetBotKnowledge(id);
-  const tx = db.transaction((botId: number) => {
-    db.prepare(`DELETE FROM prompts WHERE bot_id = ?`).run(botId);
-    db.prepare(`DELETE FROM conversations WHERE bot_id = ?`).run(botId);
-    db.prepare(`DELETE FROM support_requests WHERE bot_id = ?`).run(botId);
-    db.prepare(`DELETE FROM bots WHERE id = ?`).run(botId);
-  });
-  tx(id);
+export async function deleteBot(id: number): Promise<void> {
+  const supabase = getSupabase();
+  await supabase.from("chunks").delete().eq("bot_id", id);
+  await supabase.from("documents").delete().eq("bot_id", id);
+  await supabase.from("prompts").delete().eq("bot_id", id);
+  await supabase.from("support_requests").delete().eq("bot_id", id);
+  await supabase.from("conversations").delete().eq("bot_id", id);
+  await supabase.from("bots").delete().eq("id", id);
 }
 
 export function toPublicConfig(bot: Bot): BotPublicConfig {
@@ -206,7 +263,7 @@ export function toPublicConfig(bot: Bot): BotPublicConfig {
     const parsed = JSON.parse(bot.quick_starts);
     if (Array.isArray(parsed)) quickStarts = parsed.filter((q) => typeof q === "string");
   } catch {
-    // malformed JSON in the column — treat as no quick starts
+    // malformed
   }
   return {
     botKey: bot.public_key,
@@ -227,7 +284,6 @@ export function toPublicConfig(bot: Bot): BotPublicConfig {
   };
 }
 
-/** Parsed per-language voice map ({lang: voiceId}); malformed JSON = empty. */
 export function parseTtsVoices(bot: Bot): Record<string, string> {
   try {
     const parsed = JSON.parse(bot.tts_voices || "{}");
@@ -239,7 +295,7 @@ export function parseTtsVoices(bot: Bot): Record<string, string> {
       return out;
     }
   } catch {
-    // malformed JSON in the column — treat as no explicit voice choices
+    // malformed
   }
   return {};
 }
@@ -248,7 +304,6 @@ export function effectiveModel(bot: Bot): string {
   return bot.model || getSetting("default_model");
 }
 
-/** Admin-API shape: camelCase, quick_starts parsed, counts included when present. */
 export function serializeBot(bot: Bot | BotListItem) {
   const counts =
     "doc_count" in bot
@@ -286,7 +341,6 @@ export function serializeBot(bot: Bot | BotListItem) {
 
 export type SerializedBot = ReturnType<typeof serializeBot>;
 
-/** HSL triple like "217 91% 60%" — the only shape the theming CSS vars accept. */
 export function isValidHslTriple(value: string): boolean {
   return /^\d{1,3}(\.\d+)?\s+\d{1,3}(\.\d+)?%\s+\d{1,3}(\.\d+)?%$/.test(value.trim());
 }

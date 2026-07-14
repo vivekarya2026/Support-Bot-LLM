@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { listBots } from "@/lib/bots";
+import { listBotsAsync } from "@/lib/bots";
 import { getRedactedSettings } from "@/lib/settings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,8 +18,8 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default function WorkspaceIndexPage() {
-  const bots = listBots();
+export default async function WorkspaceIndexPage() {
+  const bots = await listBotsAsync();
   if (bots.length === 0) redirect("/onboarding");
   const settings = getRedactedSettings();
 

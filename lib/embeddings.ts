@@ -1,30 +1,56 @@
-import { env, pipeline, type FeatureExtractionPipeline } from "@xenova/transformers";
-
-// Serverless filesystems are read-only outside /tmp; cache model downloads there.
-if (process.env.VERCEL) {
-  env.cacheDir = "/tmp/transformers-cache";
-}
-
-let embedderPromise: Promise<FeatureExtractionPipeline> | null = null;
+import { getSupabase } from "./supabase";
 
 export const EMBEDDING_DIM = 384;
-const MODEL_NAME = "Xenova/all-MiniLM-L6-v2";
 
-function getEmbedder(): Promise<FeatureExtractionPipeline> {
-  if (!embedderPromise) {
-    embedderPromise = pipeline("feature-extraction", MODEL_NAME) as Promise<FeatureExtractionPipeline>;
+/**
+ * Generate an embedding using Supabase's Edge Function or a direct
+ * OpenAI-compatible endpoint. Falls back to a Supabase RPC that calls
+ * the pgvector-compatible ai.embed() if available.
+ */
+export async function embed(text: string): Promise<number[]> {
+  const supabase = getSupabase();
+
+  // Use Supabase's built-in embedding via an RPC function
+  const { data, error } = await supabase.rpc("embed_text", { input_text: text });
+
+  if (!error && data) {
+    return data as number[];
   }
-  return embedderPromise;
+
+  // Fallback: call OpenAI-compatible embedding endpoint
+  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "No embedding source available. Either configure Supabase ai.embed() or set OPENROUTER_API_KEY."
+    );
+  }
+
+  const baseUrl =
+    process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
+  const res = await fetch(`${baseUrl}/embeddings`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "openai/text-embedding-3-small",
+      input: text,
+      dimensions: EMBEDDING_DIM,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Embedding API error ${res.status}: ${body}`);
+  }
+
+  const json = await res.json();
+  return json.data[0].embedding as number[];
 }
 
-export async function embed(text: string): Promise<Float32Array> {
-  const embedder = await getEmbedder();
-  const output = await embedder(text, { pooling: "mean", normalize: true });
-  return new Float32Array(output.data as Float32Array);
-}
-
-export async function embedBatch(texts: string[]): Promise<Float32Array[]> {
-  const results: Float32Array[] = [];
+export async function embedBatch(texts: string[]): Promise<number[][]> {
+  const results: number[][] = [];
   for (const t of texts) {
     results.push(await embed(t));
   }

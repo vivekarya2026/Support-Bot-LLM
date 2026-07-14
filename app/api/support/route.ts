@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createSupportRequest } from "@/lib/conversations";
-import { getBotByPublicKey } from "@/lib/bots";
+import { getBotByPublicKeyAsync } from "@/lib/bots";
 
 export const runtime = "nodejs";
 
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (!body.botKey) {
     return Response.json({ error: "botKey is required" }, { status: 400 });
   }
-  const bot = getBotByPublicKey(body.botKey);
+  const bot = await getBotByPublicKeyAsync(body.botKey);
   if (!bot) {
     return Response.json({ error: "Unknown bot" }, { status: 404 });
   }
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   if (!emailOk) {
     return Response.json({ error: "invalid email" }, { status: 400 });
   }
-  const created = createSupportRequest({
+  const created = await createSupportRequest({
     botId: bot.id,
     conversationId: body.conversationId ?? null,
     email: body.email.trim(),

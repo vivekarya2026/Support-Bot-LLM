@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getBotByPublicKey } from "@/lib/bots";
+import { getBotByPublicKeyAsync } from "@/lib/bots";
 import { checkVoiceHealth, voiceGloballyEnabled } from "@/lib/voice";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /** Widget-facing capability probe: called once per panel mount. */
 export async function GET(req: NextRequest) {
   const botKey = req.nextUrl.searchParams.get("botKey") ?? "";
-  const bot = getBotByPublicKey(botKey);
+  const bot = await getBotByPublicKeyAsync(botKey);
   if (!bot) return Response.json({ error: "unknown bot" }, { status: 404 });
 
   const off = {

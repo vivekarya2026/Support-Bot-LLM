@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Sparkles } from "lucide-react";
-import { getBotBySlug, toPublicConfig } from "@/lib/bots";
+import { getBotBySlugAsync, toPublicConfig } from "@/lib/bots";
 import { ChatWidget } from "@/components/widget/chat-widget";
 
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export async function generateMetadata({
   params: Promise<{ botSlug: string }>;
 }): Promise<Metadata> {
   const { botSlug } = await params;
-  const bot = getBotBySlug(botSlug);
+  const bot = await getBotBySlugAsync(botSlug);
   return { title: bot ? `${bot.name} — Chat` : "Chat" };
 }
 
@@ -23,7 +23,7 @@ export default async function ShareChatPage({
   params: Promise<{ botSlug: string }>;
 }) {
   const { botSlug } = await params;
-  const bot = getBotBySlug(botSlug);
+  const bot = await getBotBySlugAsync(botSlug);
   if (!bot) notFound();
   const config = toPublicConfig(bot);
 

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getBotBySlug } from "@/lib/bots";
+import { getBotBySlugAsync } from "@/lib/bots";
 import { reindexUrlDocument } from "@/lib/documents";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ type Ctx = { params: Promise<{ slug: string; docId: string }> };
 
 export async function POST(_req: NextRequest, ctx: Ctx) {
   const { slug, docId } = await ctx.params;
-  const bot = getBotBySlug(slug);
+  const bot = await getBotBySlugAsync(slug);
   if (!bot) return Response.json({ error: "bot not found" }, { status: 404 });
   const id = Number(docId);
   if (!Number.isFinite(id)) return Response.json({ error: "invalid id" }, { status: 400 });

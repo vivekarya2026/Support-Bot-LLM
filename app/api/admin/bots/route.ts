@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
-import { createBot, listBots, serializeBot, isValidHslTriple } from "@/lib/bots";
+import { createBot, listBotsAsync, serializeBot, isValidHslTriple } from "@/lib/bots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return Response.json({ bots: listBots().map(serializeBot) });
+  return Response.json({ bots: (await listBotsAsync()).map(serializeBot) });
 }
 
 export async function POST(req: NextRequest) {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const bot = createBot({
+    const bot = await createBot({
       name: body.name,
       primaryColor: body.primaryColor,
       greeting: body.greeting,

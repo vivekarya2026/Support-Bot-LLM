@@ -29,6 +29,6 @@ export async function PUT(req: NextRequest) {
       delete update[k];
     }
   }
-  setSettings(update);
+  await setSettings(update);
   return Response.json(getRedactedSettings());
 }

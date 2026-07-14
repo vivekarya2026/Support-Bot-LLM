@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getBotBySlug } from "@/lib/bots";
+import { getBotBySlugAsync } from "@/lib/bots";
 import { indexDocument, parseFileBuffer, parseUrlInput } from "@/lib/documents";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ type Ctx = { params: Promise<{ slug: string }> };
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { slug } = await ctx.params;
-  const bot = getBotBySlug(slug);
+  const bot = await getBotBySlugAsync(slug);
   if (!bot) return Response.json({ error: "bot not found" }, { status: 404 });
 
   const contentType = req.headers.get("content-type") ?? "";

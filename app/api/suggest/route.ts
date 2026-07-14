@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getOpenRouter } from "@/lib/openrouter";
-import { getBotByPublicKey, effectiveModel, toPublicConfig } from "@/lib/bots";
+import { getBotByPublicKeyAsync, effectiveModel, toPublicConfig } from "@/lib/bots";
 import { getActivePromptContent } from "@/lib/prompts";
 
 export const runtime = "nodejs";
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ suggestions: [] });
   }
 
-  const bot = body.botKey ? getBotByPublicKey(body.botKey) : undefined;
+  const bot = body.botKey ? await getBotByPublicKeyAsync(body.botKey) : undefined;
   if (!bot) return Response.json({ suggestions: [] }, { status: body.botKey ? 404 : 400 });
 
   const partial = (body.partial ?? "").trim();
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ suggestions: [] });
   }
 
-  const personaExcerpt = getActivePromptContent(bot.id).slice(0, 600);
+  const personaExcerpt = (await getActivePromptContent(bot.id)).slice(0, 600);
   const { quickStarts } = toPublicConfig(bot);
 
   const userPrompt = [
