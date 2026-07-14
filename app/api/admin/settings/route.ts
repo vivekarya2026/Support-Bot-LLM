@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
-import { getRedactedSettings, setSettings, type Settings } from "@/lib/settings";
+import { getRedactedSettingsAsync, setSettings, type Settings } from "@/lib/settings";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  return Response.json(getRedactedSettings());
+  return Response.json(await getRedactedSettingsAsync());
 }
 
 export async function PUT(req: NextRequest) {
@@ -23,12 +23,11 @@ export async function PUT(req: NextRequest) {
     const v = body[k];
     if (typeof v === "string") update[k] = v;
   }
-  // Treat empty/masked api key values as "don't change"
   for (const k of ["openrouter_api_key", "tavily_api_key"] as const) {
     if (update[k] === "" || /^•+/.test(update[k] ?? "")) {
       delete update[k];
     }
   }
   await setSettings(update);
-  return Response.json(getRedactedSettings());
+  return Response.json(await getRedactedSettingsAsync());
 }

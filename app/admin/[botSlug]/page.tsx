@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getBotBySlugAsync } from "@/lib/bots";
 import { listConversations, listSupportRequests } from "@/lib/conversations";
 import { listDocuments } from "@/lib/documents";
-import { getRedactedSettings } from "@/lib/settings";
+import { getRedactedSettingsAsync } from "@/lib/settings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, BookOpen, KeyRound, LifeBuoy, MessagesSquare } from "lucide-react";
@@ -20,7 +20,7 @@ export default async function BotDashboard({
   const bot = await getBotBySlugAsync(botSlug);
   if (!bot) notFound();
 
-  const settings = getRedactedSettings();
+  const settings = await getRedactedSettingsAsync();
   const docs = await listDocuments(bot.id);
   const conversations = await listConversations(bot.id, 10);
   const support = await listSupportRequests(bot.id);

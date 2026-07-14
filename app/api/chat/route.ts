@@ -108,9 +108,9 @@ export async function POST(req: NextRequest) {
   }
   const contextText = formatContext(chunks);
 
-  let openrouter: ReturnType<typeof getOpenRouter>;
+  let openrouter: Awaited<ReturnType<typeof getOpenRouter>>;
   try {
-    openrouter = getOpenRouter();
+    openrouter = await getOpenRouter();
   } catch (err) {
     return jsonError(err instanceof Error ? err.message : "Failed to init LLM client", 500);
   }

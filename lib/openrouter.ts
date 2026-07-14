@@ -1,10 +1,10 @@
 import OpenAI from "openai";
-import { getAllSettings } from "./settings";
+import { getAllSettingsAsync } from "./settings";
 
 export { DEFAULT_MODELS } from "./providers";
 
-export function getOpenRouter(): OpenAI {
-  const { openrouter_api_key, openrouter_base_url } = getAllSettings();
+export async function getOpenRouter(): Promise<OpenAI> {
+  const { openrouter_api_key, openrouter_base_url } = await getAllSettingsAsync();
   if (!openrouter_api_key) {
     throw new Error(
       "LLM API key is not set. Add it in the admin Settings page or .env.local."

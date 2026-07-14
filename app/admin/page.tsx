@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { listBotsAsync } from "@/lib/bots";
-import { getRedactedSettings } from "@/lib/settings";
+import { getRedactedSettingsAsync } from "@/lib/settings";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 export default async function WorkspaceIndexPage() {
   const bots = await listBotsAsync();
   if (bots.length === 0) redirect("/onboarding");
-  const settings = getRedactedSettings();
+  const settings = await getRedactedSettingsAsync();
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">

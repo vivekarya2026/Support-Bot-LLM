@@ -44,9 +44,9 @@ export async function POST(req: NextRequest) {
   const model = effectiveModel(bot);
   if (!model) return Response.json({ suggestions: [] });
 
-  let openrouter: ReturnType<typeof getOpenRouter>;
+  let openrouter: Awaited<ReturnType<typeof getOpenRouter>>;
   try {
-    openrouter = getOpenRouter();
+    openrouter = await getOpenRouter();
   } catch {
     return Response.json({ suggestions: [] });
   }

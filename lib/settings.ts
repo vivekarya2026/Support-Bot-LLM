@@ -100,3 +100,16 @@ export function getRedactedSettings(): Settings & {
     tavily_api_key_set: Boolean(s.tavily_api_key),
   };
 }
+
+export async function getRedactedSettingsAsync(): Promise<
+  Settings & { openrouter_api_key_set: boolean; tavily_api_key_set: boolean }
+> {
+  const s = await getAllSettingsAsync();
+  return {
+    ...s,
+    openrouter_api_key: s.openrouter_api_key ? "•".repeat(10) + s.openrouter_api_key.slice(-4) : "",
+    openrouter_api_key_set: Boolean(s.openrouter_api_key),
+    tavily_api_key: s.tavily_api_key ? "•".repeat(10) + s.tavily_api_key.slice(-4) : "",
+    tavily_api_key_set: Boolean(s.tavily_api_key),
+  };
+}
