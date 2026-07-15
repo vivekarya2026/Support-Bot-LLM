@@ -182,3 +182,95 @@
     opacity: 0.6;
   }
 }
+
+/* ─── Landing page scroll animations ─── */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes fadeInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes fadeInRight {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes orbPulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+/* Glass utility */
+.glass {
+  background: hsl(var(--foreground) / 0.04);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid hsl(var(--foreground) / 0.08);
+}
+
+.glass-strong {
+  background: hsl(var(--foreground) / 0.06);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid hsl(var(--foreground) / 0.12);
+}
+
+/* Glow effect for primary buttons */
+.glow-primary {
+  box-shadow:
+    0 0 20px hsl(217 91% 60% / 0.25),
+    0 0 60px hsl(217 91% 60% / 0.1);
+}
+
+.glow-primary:hover {
+  box-shadow:
+    0 0 30px hsl(217 91% 60% / 0.35),
+    0 0 80px hsl(217 91% 60% / 0.15);
+}
