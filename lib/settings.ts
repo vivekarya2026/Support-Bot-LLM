@@ -18,7 +18,7 @@ export type Settings = {
 const ENV_FALLBACK: Record<SettingKey, () => string | undefined> = {
   openrouter_api_key: () => process.env.OPENROUTER_API_KEY,
   openrouter_base_url: () => process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
-  default_model: () => "anthropic/claude-sonnet-4.5",
+  default_model: () => "google/gemma-4-26b-a4b:free",
   tavily_api_key: () => process.env.TAVILY_API_KEY,
   voice_service_url: () => process.env.VOICE_SERVICE_URL ?? "http://127.0.0.1:8078",
 };
